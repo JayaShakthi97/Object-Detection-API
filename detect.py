@@ -20,8 +20,14 @@ flags.DEFINE_integer('size', 416, 'resize images to')
 flags.DEFINE_list('images', '/data/images/dog.jpg', 'list with paths to input images')
 flags.DEFINE_string('tfrecord', None, 'tfrecord instead of image')
 flags.DEFINE_string('testing_folder', None, 'folder path to input images')
+flags.DEFINE_boolean('test_r', False, 'test for testing sub folders')
 flags.DEFINE_string('output', './detections/', 'path to output folder')
 flags.DEFINE_integer('num_classes', 80, 'number of classes in the model')
+
+
+def getFileNameFromPath(path='', isForword=True):
+    splitted = path.split('/') if isForword else path.split('\\')
+    return splitted[len(splitted) - 1]
 
 
 def main(_argv):
@@ -41,14 +47,27 @@ def main(_argv):
     print('classes loaded')
 
     if FLAGS.testing_folder:
-        print('--------- Testing folder -------------')
+        print('Testing for a folder.........')
         testing_folder_path = FLAGS.testing_folder
-        images = glob.glob(testing_folder_path)
-        print(images)
+
+        images = []
+        if FLAGS.test_r:
+            print('Testing recursively.........')
+            testing_sub_folders = glob.glob(testing_folder_path)
+            for testing_sub_folder in testing_sub_folders:
+                sub_folder_images = glob.glob(testing_sub_folder + '*.jpg')
+                images.extend(sub_folder_images)
+        else:
+            images = glob.glob(testing_folder_path)
+
         raw_images = []
+        print('Decoding images...')
         for image in images:
+            decode_t1 = time.time()
             img_raw = tf.image.decode_image(
                 open(image, 'rb').read(), channels=3)
+            decode_t2 = time.time()
+            print('Decode time: {}'.format(decode_t2 - decode_t1))
             raw_images.append(img_raw)
     elif FLAGS.tfrecord:
         dataset = load_tfrecord_dataset(
@@ -63,38 +82,40 @@ def main(_argv):
                 open(image, 'rb').read(), channels=3)
             raw_images.append(img_raw)
     num = 0
-    csv_content = []
-    for raw_img in raw_images:
-        num += 1
-        img = tf.expand_dims(raw_img, 0)
-        img = transform_images(img, FLAGS.size)
+    with open('./detections/results.csv', 'w', encoding='UTF8', newline='') as csv_file:
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(
+            ['Image Name', 'Detection saved to', 'Exec time', 'Class 1', 'Confidence', 'Class 2', 'Confidence',
+             'Class 3', 'Confidence'])
 
-        t1 = time.time()
-        boxes, scores, classes, nums = yolo(img)
-        t2 = time.time()
-        logging.info('time: {}'.format(t2 - t1))
+        for raw_img in raw_images:
+            num += 1
+            img = tf.expand_dims(raw_img, 0)
+            img = transform_images(img, FLAGS.size)
 
-        print('detections:')
-        for i in range(nums[0]):
-            print('\t{}, {}, {}'.format(class_names[int(classes[0][i])],
-                                        np.array(scores[0][i]),
-                                        np.array(boxes[0][i])))
+            t1 = time.time()
+            boxes, scores, classes, nums = yolo(img)
+            t2 = time.time()
+            logging.info('time: {}'.format(t2 - t1))
 
-        img = cv2.cvtColor(raw_img.numpy(), cv2.COLOR_RGB2BGR)
-        img = draw_outputs(img, (boxes, scores, classes, nums), class_names)
-        cv2.imwrite(FLAGS.output + 'detection' + str(num) + '.jpg', img)
-        print('output saved to: {}'.format(FLAGS.output + 'detection' + str(num) + '.jpg'))
+            image_name = getFileNameFromPath(images[num - 1])
+            print('Image: {} detections:'.format(image_name))
+            for i in range(nums[0]):
+                print('\t{}, {}, {}'.format(class_names[int(classes[0][i])],
+                                            np.array(scores[0][i]),
+                                            np.array(boxes[0][i])))
 
-        detected_classes = []
-        for j in range(nums[0]):
-            detected_classes.append(class_names[int(classes[0][j])])
-        csv_row = [images[num - 1], 'detection' + str(num) + '.jpg']
-        csv_row.extend(detected_classes)
-        csv_content.append(csv_row)
+            img = cv2.cvtColor(raw_img.numpy(), cv2.COLOR_RGB2BGR)
+            img = draw_outputs(img, (boxes, scores, classes, nums), class_names)
+            cv2.imwrite(FLAGS.output + 'detection' + str(num) + '.jpg', img)
+            print('output saved to: {}'.format(FLAGS.output + 'detection' + str(num) + '.jpg'))
 
-    with open('./detections/results.csv', 'w', encoding='UTF8', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerows(csv_content)
+            csv_row = [image_name, 'detection' + str(num) + '.jpg', (t2 - t1)]
+            for i in range(nums[0]):
+                csv_row.append(class_names[int(classes[0][i])])
+                csv_row.append(np.array(scores[0][i]))
+
+            csv_writer.writerow(csv_row)
 
 
 if __name__ == '__main__':
