@@ -77,6 +77,7 @@ def main(_argv):
         img = cv2.putText(img, "FPS: {:.2f}".format(fps), (0, 30),
                           cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0, 0, 255), 2)
 
+        print('Video frame {}'.format(count))
         if FLAGS.output:
             out.write(img)
         # cv2.imshow('output', img)
