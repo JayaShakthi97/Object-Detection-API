@@ -17,12 +17,13 @@ flags.DEFINE_string('weights', './weights/yolov3.tf',
                     'path to weights file')
 flags.DEFINE_boolean('tiny', False, 'yolov3 or yolov3-tiny')
 flags.DEFINE_integer('size', 416, 'resize images to')
-flags.DEFINE_list('images', '/data/images/dog.jpg', 'list with paths to input images')
+flags.DEFINE_list('images', None, 'list with paths to input images')
 flags.DEFINE_string('tfrecord', None, 'tfrecord instead of image')
 flags.DEFINE_string('testing_folder', None, 'folder path to input images')
 flags.DEFINE_boolean('test_r', False, 'test for testing sub folders')
 flags.DEFINE_string('output', './detections/', 'path to output folder')
 flags.DEFINE_integer('num_classes', 80, 'number of classes in the model')
+flags.DEFINE_boolean('save_detection', True, 'detection is saved or not')
 
 
 def getFileNameFromPath(path='', isForword=True):
@@ -31,6 +32,10 @@ def getFileNameFromPath(path='', isForword=True):
 
 
 def main(_argv):
+    if FLAGS.testing_folder is None and FLAGS.images is None:
+        print('No test data provided')
+        return
+
     physical_devices = tf.config.experimental.list_physical_devices('GPU')
     if len(physical_devices) > 0:
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -105,10 +110,11 @@ def main(_argv):
                                             np.array(scores[0][i]),
                                             np.array(boxes[0][i])))
 
-            img = cv2.cvtColor(raw_img.numpy(), cv2.COLOR_RGB2BGR)
-            img = draw_outputs(img, (boxes, scores, classes, nums), class_names)
-            cv2.imwrite(FLAGS.output + 'detection' + str(num) + '.jpg', img)
-            print('output saved to: {}'.format(FLAGS.output + 'detection' + str(num) + '.jpg'))
+            if FLAGS.save_detection:
+                img = cv2.cvtColor(raw_img.numpy(), cv2.COLOR_RGB2BGR)
+                img = draw_outputs(img, (boxes, scores, classes, nums), class_names)
+                cv2.imwrite(FLAGS.output + 'detection' + str(num) + '.jpg', img)
+                print('output saved to: {}'.format(FLAGS.output + 'detection' + str(num) + '.jpg'))
 
             csv_row = [image_name, 'detection' + str(num) + '.jpg', (t2 - t1)]
             for i in range(nums[0]):
